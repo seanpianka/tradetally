@@ -96,11 +96,12 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
     ports:
-      - "8080:80"
+      - "80:80"
       - "3001:3000"
     volumes:
       - ./backend/src/logs:/app/backend/src/logs
       - ./backend/src/data:/app/backend/src/data
+      - ./backend/src/utils/csvParser.js:/app/backend/src/utils/csvParser.js
     networks:
       - trader-network
     restart: unless-stopped

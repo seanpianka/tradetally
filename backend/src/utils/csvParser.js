@@ -394,32 +394,32 @@ const brokerParsers = {
     // Parse the DESCRIPTION field to extract trade details
     const description = row.DESCRIPTION || row.Description || '';
     const type = row.TYPE || row.Type || '';
-    
+
     // Skip non-trade rows
     if (type !== 'TRD') {
       return null;
     }
-    
+
     // Parse trade details from description (e.g., "BOT +1,000 82655M107 @.77")
     const tradeMatch = description.match(/(BOT|SOLD)\s+([\+\-]?[\d,]+)\s+(\S+)\s+@([\d.]+)/);
     if (!tradeMatch) {
       return null;
     }
-    
+
     const [_, action, quantityStr, symbol, priceStr] = tradeMatch;
     const quantity = Math.abs(parseFloat(quantityStr.replace(/,/g, '')));
     const price = parseFloat(priceStr);
     const side = action === 'BOT' ? 'long' : 'short';
-    
+
     // Parse date and time
     const date = row.DATE || row.Date || '';
     const time = row.TIME || row.Time || '';
     const dateTime = `${date} ${time}`;
-    
+
     // Parse fees
     const miscFees = parseFloat((row['Misc Fees'] || '0').replace(/[$,]/g, '')) || 0;
     const commissionsFees = parseFloat((row['Commissions & Fees'] || '0').replace(/[$,]/g, '')) || 0;
-    
+
     return {
       symbol: symbol,
       tradeDate: parseDate(date),
@@ -555,7 +555,7 @@ const brokerParsers = {
     const quantity = Math.abs(parseInt(row.Quantity || 0));
     const isShort = parseFloat(row['Cost Per Share'] || 0) > parseFloat(row['Proceeds Per Share'] || 0) &&
                     parseFloat(row['Gain/Loss ($)'] || 0) > 0;
-    
+
     return {
       symbol: cleanString(row.Symbol),
       tradeDate: parseDate(row['Opened Date']),
@@ -895,7 +895,7 @@ function applyTradeGrouping(trades, settings) {
               multiplier = 1;
             }
             const groupEntryValue = currentGroup.entryPrice * currentGroup.quantity * multiplier;
-            
+
             // Calculate entry value for the trade being added
             let tradeMultiplier;
             if (trade.instrumentType === 'future') {
@@ -906,7 +906,7 @@ function applyTradeGrouping(trades, settings) {
               tradeMultiplier = 1;
             }
             const tradeEntryValue = trade.entryPrice * trade.quantity * tradeMultiplier;
-            
+
             const totalEntryValue = groupEntryValue + tradeEntryValue;
             if (totalEntryValue > 0) {
               currentGroup.pnlPercent = (totalPnl / totalEntryValue) * 100;
@@ -979,7 +979,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
       console.log(`  ${symbol}: ${position.side} ${position.quantity} shares @ $${position.entryPrice}`);
     });
     console.log(`=====================\n`);
-    
+
     let csvString = fileBuffer.toString('utf-8');
 
     // Remove BOM (Byte Order Mark) if present - this can cause parsing issues
@@ -1002,22 +1002,22 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         console.log('Skipped title row in Lightspeed CSV');
       }
     }
-    
+
     // Handle PaperMoney CSV files that have multiple sections
     if (broker === 'papermoney') {
       const lines = csvString.split('\n');
-      
+
       // Find the "Filled Orders" section
       let filledOrdersStart = -1;
       let filledOrdersEnd = -1;
-      
+
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes('Filled Orders')) {
           filledOrdersStart = i + 1; // Skip the "Filled Orders" title line
           break;
         }
       }
-      
+
       if (filledOrdersStart >= 0) {
         // Find the header line (contains "Exec Time,Spread,Side,Qty")
         for (let i = filledOrdersStart; i < lines.length; i++) {
@@ -1026,7 +1026,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
             break;
           }
         }
-        
+
         // Find the end of the filled orders section (next empty line or section)
         for (let i = filledOrdersStart + 1; i < lines.length; i++) {
           if (lines[i].trim() === '' || lines[i].includes('Canceled Orders') || lines[i].includes('Rolling Strategies')) {
@@ -1034,11 +1034,11 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
             break;
           }
         }
-        
+
         if (filledOrdersEnd === -1) {
           filledOrdersEnd = lines.length;
         }
-        
+
         // Extract only the filled orders section
         csvString = lines.slice(filledOrdersStart, filledOrdersEnd).join('\n');
         console.log(`Extracted PaperMoney filled orders section: lines ${filledOrdersStart} to ${filledOrdersEnd}`);
@@ -1046,7 +1046,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         throw new Error('Could not find "Filled Orders" section in PaperMoney CSV');
       }
     }
-    
+
     // Detect delimiter - check if it's tab-separated (common for Schwab)
     let delimiter = ',';
     let parseOptions = {
@@ -1055,7 +1055,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
       trim: true,
       delimiter: delimiter
     };
-    
+
     if (broker === 'schwab') {
       const firstLine = csvString.split('\n')[0];
       if (firstLine.includes('\t') && !firstLine.includes(',')) {
@@ -1063,7 +1063,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         console.log('Detected tab-separated Schwab file');
         parseOptions.delimiter = delimiter;
       }
-      
+
       // Check if the first line is missing headers (starts with actual data)
       const firstFields = firstLine.split(delimiter);
       if (firstFields.length > 20 && !firstLine.toLowerCase().includes('symbol')) {
@@ -1071,7 +1071,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         parseOptions.columns = false; // Parse as arrays instead
       }
     }
-    
+
     // Special handling for thinkorswim CSV format
     if (broker === 'thinkorswim') {
       // Thinkorswim CSVs have account statement header rows that need to be removed
@@ -1154,7 +1154,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
       console.log('First few lines after cleanup:');
       debugLines.forEach((line, i) => console.log(`Line ${i}: ${line}`));
     }
-    
+
     // Special handling for IBKR CSV formats
     if (broker === 'ibkr' || broker === 'ibkr_trade_confirmation') {
       // IBKR CSVs can have quoted fields with commas inside and variable column counts
@@ -1171,23 +1171,23 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         skip_records_with_error: true // Skip problematic records instead of failing
       };
       console.log('Using special parsing options for IBKR CSV');
-      
+
       // Log first few lines for debugging
       const debugLines = csvString.split('\n').slice(0, 5);
       console.log('First few lines of IBKR CSV:');
       debugLines.forEach((line, i) => console.log(`Line ${i}: ${line.substring(0, 200)}`));
     }
-    
+
     let records;
     try {
       records = parse(csvString, parseOptions);
     } catch (parseError) {
       console.error('CSV parsing error:', parseError.message);
-      
+
       // If IBKR parsing fails, try alternative approach
       if (broker === 'ibkr' || broker === 'ibkr_trade_confirmation') {
         console.log('Trying alternative parsing approach for IBKR');
-        
+
         // Try with even more relaxed options
         parseOptions = {
           columns: true,
@@ -1207,7 +1207,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
             return record;
           }
         };
-        
+
         try {
           records = parse(csvString, parseOptions);
         } catch (retryError) {
@@ -1274,7 +1274,7 @@ async function parseCSV(fileBuffer, broker = 'generic', context = {}) {
         throw parseError;
       }
     }
-    
+
     console.log(`Parsing ${records.length} records with ${broker} parser`);
 
     // Check if CSV contains a currency column BEFORE broker-specific parsing
@@ -1676,19 +1676,19 @@ function parseDate(dateStr) {
     if (monthNum < 1 || monthNum > 12) return null;
     if (dayNum < 1 || dayNum > 31) return null;
     if (yearNum < 1900 || yearNum > 2100) return null;
-    
+
     // Validate the date is actually valid (e.g., not Feb 30)
     const date = new Date(yearNum, monthNum - 1, dayNum);
     if (date.getFullYear() !== yearNum || date.getMonth() !== monthNum - 1 || date.getDate() !== dayNum) {
       return null; // Invalid date (e.g., Feb 30)
     }
-    
+
     // Create date in YYYY-MM-DD format directly to avoid timezone issues
     const monthPadded = monthNum.toString().padStart(2, '0');
     const dayPadded = dayNum.toString().padStart(2, '0');
     return `${yearNum}-${monthPadded}-${dayPadded}`;
   }
-  
+
   // Fall back to default date parsing with validation
   try {
     const date = new Date(cleanDateStr);
@@ -1852,19 +1852,19 @@ function parseDateTime(dateTimeStr) {
 // Lightspeed-specific datetime parser that handles Central Time
 function parseLightspeedDateTime(dateTimeStr) {
   if (!dateTimeStr) return null;
-  
+
   try {
     // Lightspeed exports times in Central Time (America/Chicago)
     // We need to parse the datetime and convert it to UTC properly
-    
+
     // Parse the datetime string components manually to avoid timezone interpretation
     // Expected formats: "2025-04-09 16:33" or "04/09/2025 16:33:00"
     const parts = dateTimeStr.trim().split(' ');
     if (parts.length < 2) return null;
-    
+
     const [datePart, timePart] = parts;
     let year, month, day;
-    
+
     // Check if date is in MM/DD/YYYY format
     if (datePart.includes('/')) {
       const dateMatch = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -1877,28 +1877,28 @@ function parseLightspeedDateTime(dateTimeStr) {
       // Assume YYYY-MM-DD format
       [year, month, day] = datePart.split('-').map(Number);
     }
-    
+
     // Parse time part (HH:MM or HH:MM:SS)
     const timeParts = timePart.split(':');
     const hours = parseInt(timeParts[0]);
     const minutes = parseInt(timeParts[1]);
-    
+
     if (!year || !month || !day || hours === undefined || minutes === undefined) return null;
-    
+
     // Create UTC date object with explicit values (treating input as literal time)
     // Month is 0-indexed in JavaScript Date
     const literalDate = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
-    
+
     // Now adjust for Lightspeed timezone
     // Based on your requirement: 16:33 should become 20:33 UTC
     // This means we need to add 4 hours to the literal time
     const offsetHours = 4; // Fixed 4-hour offset to get 16:33 -> 20:33 conversion
-    
+
     // Add offset hours to convert from Lightspeed time to UTC
     const utcDate = new Date(literalDate.getTime() + (offsetHours * 60 * 60 * 1000));
-    
+
     console.log(`Lightspeed time conversion: ${dateTimeStr} (Central) -> ${utcDate.toISOString()} (UTC)`);
-    
+
     return utcDate.toISOString();
   } catch (error) {
     console.warn('Error parsing Lightspeed datetime:', dateTimeStr, error.message);
@@ -1910,15 +1910,15 @@ function parseLightspeedDateTime(dateTimeStr) {
 function isDaylightSavingTime(date) {
   // DST in US typically runs from second Sunday in March to first Sunday in November
   const year = date.getFullYear();
-  
+
   // Second Sunday in March
   const marchSecondSunday = new Date(year, 2, 1); // March 1st
   marchSecondSunday.setDate(marchSecondSunday.getDate() + (7 - marchSecondSunday.getDay()) + 7);
-  
-  // First Sunday in November  
+
+  // First Sunday in November
   const novemberFirstSunday = new Date(year, 10, 1); // November 1st
   novemberFirstSunday.setDate(novemberFirstSunday.getDate() + (7 - novemberFirstSunday.getDay()));
-  
+
   return date >= marchSecondSunday && date < novemberFirstSunday;
 }
 
@@ -1930,11 +1930,11 @@ function parseSide(sideStr) {
 }
 
 function parseLightspeedSide(sideCode, buySell, principalAmount, netAmount, quantity) {
-  
+
   // PRIORITY 1: Check Side column (B/S indicator) - this is most reliable
   if (sideCode) {
     const cleanSide = sideCode.toString().trim().toUpperCase();
-    
+
     if (cleanSide === 'S' || cleanSide === 'SELL') {
       return 'sell';
     }
@@ -1942,7 +1942,7 @@ function parseLightspeedSide(sideCode, buySell, principalAmount, netAmount, quan
       return 'buy';
     }
   }
-  
+
   // PRIORITY 2: Check quantity sign (negative = sell, positive = buy)
   if (quantity !== undefined && quantity !== null) {
     const qty = parseFloat(quantity);
@@ -1953,11 +1953,11 @@ function parseLightspeedSide(sideCode, buySell, principalAmount, netAmount, quan
       return 'buy';
     }
   }
-  
+
   // PRIORITY 3: Check Buy/Sell column (Long Buy/Long Sell)
   if (buySell) {
     const cleanBuySell = buySell.toString().toLowerCase().trim();
-    
+
     if (cleanBuySell.includes('sell') || cleanBuySell === 'long sell' || cleanBuySell === 'short sell') {
       return 'sell';
     }
@@ -1965,7 +1965,7 @@ function parseLightspeedSide(sideCode, buySell, principalAmount, netAmount, quan
       return 'buy';
     }
   }
-  
+
   // Default to buy if we can't determine
   return 'buy';
 }
@@ -2132,45 +2132,45 @@ function parseInstrumentData(symbol) {
 // PostgreSQL 16 compatible numeric parsing
 function parseNumeric(value, defaultValue = 0) {
   if (value === null || value === undefined || value === '') return defaultValue;
-  
+
   const cleanValue = value.toString().trim().replace(/[$,]/g, '');
   if (cleanValue === '') return defaultValue;
-  
+
   const parsed = parseFloat(cleanValue);
   if (isNaN(parsed) || !isFinite(parsed)) return defaultValue;
-  
+
   // PostgreSQL 16 has stricter limits on numeric precision
   if (Math.abs(parsed) > 1e15) return defaultValue;
-  
+
   return parsed;
 }
 
 function parseInteger(value, defaultValue = 0) {
   if (value === null || value === undefined || value === '') return defaultValue;
-  
+
   const cleanValue = value.toString().trim().replace(/[,]/g, '');
   if (cleanValue === '') return defaultValue;
-  
+
   const parsed = parseInt(cleanValue);
   if (isNaN(parsed) || !isFinite(parsed)) return defaultValue;
-  
+
   // PostgreSQL 16 integer limits
   if (parsed < -2147483648 || parsed > 2147483647) return defaultValue;
-  
+
   return Math.abs(parsed); // Ensure positive for quantities
 }
 
 function calculateLightspeedFees(row) {
   const fees = [
-    'FeeSEC', 'FeeMF', 'Fee1', 'Fee2', 'Fee3', 
+    'FeeSEC', 'FeeMF', 'Fee1', 'Fee2', 'Fee3',
     'FeeStamp', 'FeeTAF', 'Fee4'
   ];
-  
+
   let totalFees = 0;
   fees.forEach(feeField => {
     totalFees += parseNumeric(row[feeField]);
   });
-  
+
   return totalFees;
 }
 
@@ -2247,27 +2247,27 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
         console.log(`[CUSIP] ${cleanCusip} not resolved, will process in background`);
       }
     }
-    
+
     console.log(`[CUSIP] Resolved ${Object.keys(cusipToTickerMap).length} of ${cusipsToResolve.size} CUSIPs from database/cache. ${unresolvedCusips.length} will be queued for background processing.`);
-    
+
     // Add unresolved CUSIPs to the processing queue
     if (unresolvedCusips.length > 0) {
       await cusipQueue.addToQueue(unresolvedCusips, 2); // High priority for import
       console.log(`Added ${unresolvedCusips.length} CUSIPs to background processing queue`);
     }
   }
-  
+
   // Parse all transactions
   const transactions = [];
-  
+
   for (const record of records) {
     try {
       // Resolve symbol (convert CUSIP if needed) using batch results
       const rawSymbol = cleanString(record.Symbol);
       const rawCusip = cleanString(record.CUSIP);
-      
+
       let resolvedSymbol = rawSymbol;
-      
+
       // Check if symbol is a CUSIP and we have it in our batch results
       if (rawSymbol && rawSymbol.length === 9 && /^[0-9A-Z]{8}[0-9]$/.test(rawSymbol) && cusipToTickerMap[rawSymbol]) {
         resolvedSymbol = cusipToTickerMap[rawSymbol];
@@ -2284,7 +2284,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
       const sideValue = record.Side || record.side || record.SIDE;
       const buySellValue = record['Buy/Sell'] || record['Buy Sell'] || record.BuySell || record['Long/Short'];
       const side = parseLightspeedSide(sideValue, buySellValue, record['Principal Amount'], record['NET Amount'], record.Qty);
-      
+
       // DEBUG: Log the raw CSV data and parsed side for ALL transactions
       console.log(`[PROCESS] CSV TRANSACTION DEBUG: ${resolvedSymbol}`);
       console.log(`  Side: "${record.Side}"`);
@@ -2294,7 +2294,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
       console.log(`  Raw Symbol: "${record.Symbol}"`);
       console.log(`  Resolved Symbol: "${resolvedSymbol}"`);
       console.log(`---`);
-      
+
       // Determine account identifier - user selection takes priority over CSV column
       const accountIdentifier = context.selectedAccountId
         ? context.selectedAccountId
@@ -2327,7 +2327,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
   }
 
   console.log(`Parsed ${transactions.length} valid transactions`);
-  
+
   // Calculate total commissions from all CSV transactions
   const totalCSVCommissions = transactions.reduce((sum, tx) => sum + tx.commission, 0);
   const totalCSVFees = transactions.reduce((sum, tx) => sum + tx.fees, 0);
@@ -2344,7 +2344,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
   });
 
   const completedTrades = [];
-  
+
   // Process transactions using round-trip trade grouping (like TradersVue and updated Schwab parser)
   Object.keys(symbolGroups).forEach(symbol => {
     const symbolTransactions = symbolGroups[symbol];
@@ -2388,29 +2388,29 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
       existingTradeId: existingPosition.id, // Store original trade ID for updates
       newExecutionsAdded: 0 // Track how many new executions are actually added
     } : null;
-    
+
     if (existingPosition) {
       console.log(`  → Starting with existing ${existingPosition.side} position: ${existingPosition.quantity} shares @ $${existingPosition.entryPrice}`);
       console.log(`  → Initial position: ${currentPosition}`);
     }
-    
+
     for (const transaction of symbolTransactions) {
       const qty = transaction.quantity;
       const prevPosition = currentPosition;
-      
+
       console.log(`\n${transaction.side} ${qty} @ $${transaction.entryPrice} | Position: ${currentPosition}`);
-      
+
       // DEBUG: Extra logging for PYXS
       if (symbol === 'PYXS') {
         console.log(`🐛 PYXS DEBUG: transaction.side="${transaction.side}", qty=${qty}, currentPosition before=${currentPosition}`);
       }
-      
+
       // Set entry time from first CSV transaction for existing position
       if (currentTrade && currentTrade.entryTime === null) {
         currentTrade.entryTime = transaction.entryTime;
         currentTrade.tradeDate = transaction.tradeDate;
       }
-      
+
       // Start new trade if going from flat to position
       if (currentPosition === 0) {
         currentTrade = {
@@ -2429,7 +2429,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
         };
         console.log(`  → Started new ${currentTrade.side} trade`);
       }
-      
+
       // Add execution to current trade (check for duplicates first)
       if (currentTrade) {
         const newExecution = {
@@ -2478,11 +2478,11 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
         } else {
           console.log(`  → Skipping duplicate execution: ${newExecution.action} ${newExecution.quantity} @ $${newExecution.price}`);
         }
-        
+
         // Accumulate total fees for this trade
         currentTrade.totalFees += (transaction.commission || 0) + (transaction.fees || 0);
       }
-      
+
       // Process the transaction
       if (transaction.side === 'buy') {
         currentPosition += qty;
@@ -2508,7 +2508,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
           // Don't modify totalQuantity when selling from long position
         }
       }
-      
+
       console.log(`  Position: ${prevPosition} → ${currentPosition}`);
 
       // Close trade if position goes to zero
@@ -2567,7 +2567,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
           currentTrade.notes = `Round trip: ${currentTrade.executions.length} executions`;
           console.log(`  [SUCCESS] Completed ${currentTrade.side} trade: ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions, P/L: $${currentTrade.pnl.toFixed(2)}`);
         }
-        
+
         // Only add trade if it has executions (skip if all were duplicates)
         if (currentTrade.executions.length > 0) {
           // Map executions to executionData for Trade.create
@@ -2579,17 +2579,17 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
         currentTrade = null;
       }
     }
-    
+
     console.log(`\n${symbol} Final Position: ${currentPosition} shares`);
-    
-    // DEBUG: Extra logging for PYXS  
+
+    // DEBUG: Extra logging for PYXS
     if (symbol === 'PYXS') {
       console.log(`🐛 PYXS FINAL DEBUG: currentPosition=${currentPosition}, Math.abs(currentPosition)=${Math.abs(currentPosition)}`);
       if (currentTrade) {
         console.log(`🐛 PYXS FINAL DEBUG: currentTrade.totalQuantity=${currentTrade.totalQuantity}, currentTrade.side=${currentTrade.side}`);
       }
     }
-    
+
     if (currentTrade) {
       console.log(`Active trade: ${currentTrade.side} ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions`);
 
@@ -2632,7 +2632,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
       currentTrade.exitTime = null;
       currentTrade.pnl = 0;
       currentTrade.pnlPercent = 0;
-      
+
       // Mark as update if this was an existing position (partial or full)
       if (currentTrade.isExistingPosition) {
         currentTrade.isUpdate = true;
@@ -2642,7 +2642,7 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
         currentTrade.notes = `Open position: ${currentTrade.executions.length} executions`;
         console.log(`  → Added open ${currentTrade.side} position: ${currentTrade.quantity} shares`);
       }
-      
+
       // Map executions to executionData for Trade.create
       currentTrade.executionData = currentTrade.executions;
       completedTrades.push(currentTrade);
@@ -2653,31 +2653,358 @@ async function parseLightspeedTransactions(records, existingPositions = {}, user
   return { trades: completedTrades };
 }
 
+/**
+ * Parse Schwab option symbol format: "XLE 01/17/2025 92.00 C"
+ * @param {string} symbol - The option symbol
+ * @returns {Object|null} - Parsed option data or null if not an option
+ */
+function parseSchwabOptionSymbol(symbol) {
+  if (!symbol) return null;
+
+  const match = symbol.toUpperCase().match(/^([A-Z]+)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d+(?:\.\d+)?)\s+([PC])$/i);
+  if (!match) return null;
+
+  const [, underlying, month, day, year, strike, type] = match;
+  return {
+    underlying,
+    expiration: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+    strike: parseFloat(strike),
+    optionType: type.toLowerCase() === 'p' ? 'put' : 'call',
+    expirationForKey: `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`
+  };
+}
+
+/**
+ * Parse split events from Schwab CSV records
+ * Looks for "Options Frwd Split" and "Stock Split" actions
+ * @param {Array} records - CSV records
+ * @returns {Object} - Split registry keyed by underlying_expiration_optionType
+ */
+function parseSchwabSplitEvents(records) {
+  const splitRegistry = {};
+
+  for (const record of records) {
+    const action = (record['Action'] || '').toLowerCase();
+    const description = record['Description'] || '';
+    const symbol = record['Symbol'] || '';
+    const date = record['Date'] || '';
+
+    // Check for option forward split
+    if (action.includes('options frwd split') || action.includes('option forward split')) {
+      const optionData = parseSchwabOptionSymbol(symbol);
+      if (optionData) {
+        const key = `${optionData.underlying}_${optionData.expiration}_${optionData.optionType}`;
+        splitRegistry[key] = {
+          type: 'option_split',
+          underlying: optionData.underlying,
+          expiration: optionData.expiration,
+          optionType: optionData.optionType,
+          postSplitStrike: optionData.strike,
+          splitDate: date,
+          description
+        };
+        console.log(`[SPLIT] Detected option split for ${key} on ${date}: post-split strike = $${optionData.strike}`);
+      }
+    }
+
+    // Check for stock split (which affects options)
+    if (action.includes('stock split')) {
+      // Extract underlying from description or symbol
+      const underlying = symbol.match(/^([A-Z]+)/)?.[1];
+      if (underlying) {
+        // Mark all options for this underlying as potentially split-affected
+        // We'll refine this when we see the actual option transactions
+        if (!splitRegistry[`${underlying}_STOCK_SPLIT`]) {
+          splitRegistry[`${underlying}_STOCK_SPLIT`] = {
+            type: 'stock_split',
+            underlying,
+            splitDate: date,
+            description
+          };
+          console.log(`[SPLIT] Detected stock split for ${underlying} on ${date}`);
+        }
+      }
+    }
+  }
+
+  return splitRegistry;
+}
+
+/**
+ * Get a grouping key for an option transaction that accounts for splits
+ * For split-affected options, returns a strike-agnostic key so pre/post split transactions group together
+ * @param {Object} transaction - The transaction object
+ * @param {Object} instrumentData - Parsed instrument data
+ * @param {Object} splitRegistry - Registry of known split events
+ * @returns {string} - Grouping key
+ */
+function getOptionGroupingKey(transaction, instrumentData, splitRegistry) {
+  // If not an option, return the symbol as-is
+  if (!instrumentData || instrumentData.instrumentType !== 'option') {
+    return transaction.symbol;
+  }
+
+  const { underlyingSymbol, expirationDate, optionType } = instrumentData;
+  const splitKey = `${underlyingSymbol}_${expirationDate}_${optionType}`;
+
+  // Check if there's a known split for this option series
+  if (splitRegistry[splitKey]) {
+    // Return strike-agnostic key for split-affected options
+    const groupKey = `${underlyingSymbol}_${expirationDate}_${optionType}_SPLIT`;
+    console.log(`[SPLIT] Using strike-agnostic grouping for ${transaction.symbol} -> ${groupKey}`);
+    return groupKey;
+  }
+
+  // Check if underlying had a stock split
+  if (splitRegistry[`${underlyingSymbol}_STOCK_SPLIT`]) {
+    const groupKey = `${underlyingSymbol}_${expirationDate}_${optionType}_SPLIT`;
+    console.log(`[SPLIT] Underlying ${underlyingSymbol} had stock split, using strike-agnostic grouping -> ${groupKey}`);
+    return groupKey;
+  }
+
+  // No split - return full symbol for exact matching
+  return transaction.symbol;
+}
+
+/**
+ * Calculate split ratio from strike prices
+ * @param {Array} transactions - Transactions in the group
+ * @returns {number|null} - Split ratio (e.g., 2 for 2:1 split) or null if can't determine
+ */
+function calculateSplitRatio(transactions) {
+  // Find unique strike prices
+  const strikes = [...new Set(transactions.map(t => t.instrumentData?.strikePrice).filter(s => s))];
+
+  if (strikes.length < 2) {
+    return null; // Need at least 2 different strikes to calculate ratio
+  }
+
+  // Sort strikes descending
+  strikes.sort((a, b) => b - a);
+
+  // Calculate ratio from highest to lowest strike
+  const ratio = strikes[0] / strikes[strikes.length - 1];
+
+  // Check if ratio is close to a whole number (common split ratios: 2, 3, 4, etc.)
+  const roundedRatio = Math.round(ratio);
+  if (Math.abs(ratio - roundedRatio) < 0.01 && roundedRatio >= 2) {
+    console.log(`[SPLIT] Calculated split ratio: ${roundedRatio}:1 (from strikes ${strikes.join(', ')})`);
+    return roundedRatio;
+  }
+
+  // Handle fractional splits (e.g., 3:2)
+  const commonRatios = [1.5, 2, 2.5, 3, 4, 5, 10];
+  for (const commonRatio of commonRatios) {
+    if (Math.abs(ratio - commonRatio) < 0.01) {
+      console.log(`[SPLIT] Calculated split ratio: ${commonRatio}:1 (from strikes ${strikes.join(', ')})`);
+      return commonRatio;
+    }
+  }
+
+  console.log(`[SPLIT] Could not determine split ratio from strikes ${strikes.join(', ')} (ratio=${ratio.toFixed(4)})`);
+  return null;
+}
+
+/**
+ * Process split-adjusted options transactions into a completed trade
+ * @param {Array} transactions - All transactions for this split-affected option series
+ * @param {number} splitRatio - The split ratio (e.g., 2 for 2:1)
+ * @param {number} valueMultiplier - Contract multiplier (100 for options)
+ * @param {Object} context - Import context
+ * @returns {Object|null} - Completed trade or null
+ */
+function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, context) {
+  if (!transactions || transactions.length === 0) return null;
+
+  // Find the post-split strike (lowest strike)
+  const strikes = [...new Set(transactions.map(t => t.instrumentData?.strikePrice).filter(s => s))];
+  strikes.sort((a, b) => a - b);
+  const postSplitStrike = strikes[0];
+  const preSplitStrike = strikes[strikes.length - 1];
+
+  console.log(`[SPLIT] Processing split-adjusted options: pre-split strike=$${preSplitStrike}, post-split strike=$${postSplitStrike}, ratio=${splitRatio}`);
+
+  // Normalize all transactions to post-split terms
+  const normalizedTransactions = transactions.map(t => {
+    const isPreSplit = t.instrumentData?.strikePrice > postSplitStrike;
+
+    if (isPreSplit) {
+      // Normalize: multiply quantity by ratio, divide price by ratio
+      const normalizedQty = t.quantity * splitRatio;
+      const normalizedPrice = t.price / splitRatio;
+
+      console.log(`[SPLIT] Normalizing pre-split transaction: ${t.action} ${t.quantity}@$${t.price} -> ${normalizedQty}@$${normalizedPrice.toFixed(4)}`);
+
+      return {
+        ...t,
+        originalQuantity: t.quantity,
+        originalPrice: t.price,
+        originalSymbol: t.symbol,
+        quantity: normalizedQty,
+        price: normalizedPrice,
+        splitAdjusted: true,
+        splitRatio
+      };
+    }
+
+    return {
+      ...t,
+      splitAdjusted: false
+    };
+  });
+
+  // Sort by date
+  normalizedTransactions.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+
+  // Process round-trip with normalized values
+  // Use the first transaction's instrument data but with post-split symbol
+  const firstTxn = normalizedTransactions[0];
+  const postSplitSymbol = normalizedTransactions.find(t => !t.splitAdjusted)?.symbol || firstTxn.symbol;
+
+  // Initialize trade
+  let currentPosition = 0;
+  let currentTrade = null;
+  const completedTrades = [];
+
+  for (const transaction of normalizedTransactions) {
+    const qty = transaction.quantity;
+
+    // Start new trade if going from flat to position
+    if (currentPosition === 0) {
+      currentTrade = {
+        symbol: postSplitSymbol,
+        entryTime: transaction.datetime,
+        tradeDate: transaction.date,
+        side: transaction.action === 'buy' ? 'long' : 'short',
+        executions: [],
+        totalQuantity: 0,
+        totalFees: 0,
+        entryValue: 0,
+        exitValue: 0,
+        broker: 'schwab',
+        accountIdentifier: transaction.accountIdentifier,
+        splitAdjusted: true,
+        splitRatio,
+        originalStrike: preSplitStrike,
+        postSplitStrike
+      };
+    }
+
+    if (currentTrade) {
+      // Store execution with original values for audit trail
+      currentTrade.executions.push({
+        action: transaction.action,
+        quantity: transaction.quantity,
+        price: transaction.price,
+        datetime: transaction.datetime,
+        fees: transaction.fees || 0,
+        // Original values for audit
+        originalQuantity: transaction.originalQuantity,
+        originalPrice: transaction.originalPrice,
+        originalSymbol: transaction.originalSymbol,
+        splitAdjusted: transaction.splitAdjusted
+      });
+      currentTrade.totalFees += (transaction.fees || 0);
+    }
+
+    // Process the transaction
+    if (transaction.action === 'buy') {
+      currentPosition += qty;
+
+      if (currentTrade && currentTrade.side === 'long') {
+        currentTrade.entryValue += qty * transaction.price * valueMultiplier;
+        currentTrade.totalQuantity += qty;
+      } else if (currentTrade && currentTrade.side === 'short') {
+        currentTrade.exitValue += qty * transaction.price * valueMultiplier;
+      }
+    } else if (transaction.action === 'short' || transaction.action === 'sell') {
+      currentPosition -= qty;
+
+      if (currentTrade && currentTrade.side === 'short') {
+        currentTrade.entryValue += qty * transaction.price * valueMultiplier;
+        currentTrade.totalQuantity += qty;
+      } else if (currentTrade && currentTrade.side === 'long') {
+        currentTrade.exitValue += qty * transaction.price * valueMultiplier;
+      }
+    }
+
+    // Close trade if position goes to zero
+    if (currentPosition === 0 && currentTrade && currentTrade.totalQuantity > 0) {
+      currentTrade.entryPrice = currentTrade.entryValue / (currentTrade.totalQuantity * valueMultiplier);
+      currentTrade.exitPrice = currentTrade.exitValue / (currentTrade.totalQuantity * valueMultiplier);
+
+      if (currentTrade.side === 'long') {
+        currentTrade.pnl = currentTrade.exitValue - currentTrade.entryValue - currentTrade.totalFees;
+      } else {
+        currentTrade.pnl = currentTrade.entryValue - currentTrade.exitValue - currentTrade.totalFees;
+      }
+
+      currentTrade.pnlPercent = (currentTrade.pnl / currentTrade.entryValue) * 100;
+      currentTrade.quantity = currentTrade.totalQuantity;
+      currentTrade.commission = currentTrade.totalFees;
+      currentTrade.fees = 0;
+
+      // Set entry/exit times
+      const executionTimes = currentTrade.executions
+        .filter(e => e.datetime)
+        .map(e => new Date(e.datetime))
+        .filter(d => !isNaN(d.getTime()));
+      const sortedTimes = executionTimes.sort((a, b) => a - b);
+      if (sortedTimes.length > 0) {
+        currentTrade.entryTime = sortedTimes[0].toISOString();
+        currentTrade.exitTime = sortedTimes[sortedTimes.length - 1].toISOString();
+      }
+
+      currentTrade.executionData = currentTrade.executions;
+      currentTrade.notes = `Split-adjusted (${splitRatio}:1): original strike $${preSplitStrike} -> $${postSplitStrike}`;
+
+      console.log(`[SPLIT] Completed split-adjusted ${currentTrade.side} trade: ${currentTrade.quantity} contracts, P/L: $${currentTrade.pnl.toFixed(2)}`);
+
+      completedTrades.push(currentTrade);
+      currentTrade = null;
+    }
+  }
+
+  // Handle open position
+  if (currentTrade && currentPosition !== 0) {
+    currentTrade.entryPrice = currentTrade.entryValue / (currentTrade.totalQuantity * valueMultiplier);
+    currentTrade.quantity = currentTrade.totalQuantity;
+    currentTrade.commission = currentTrade.totalFees;
+    currentTrade.fees = 0;
+    currentTrade.executionData = currentTrade.executions;
+    currentTrade.notes = `Split-adjusted open position (${splitRatio}:1): original strike $${preSplitStrike} -> $${postSplitStrike}`;
+
+    completedTrades.push(currentTrade);
+  }
+
+  return completedTrades;
+}
+
 async function parseSchwabTrades(records, existingPositions = {}, context = {}) {
   console.log(`Processing ${records.length} Schwab trade records`);
-  
+
   // Check if this is the new transaction format: Date,Action,Symbol,Description,Quantity,Price,Fees & Comm,Amount
   if (records.length > 0 && !Array.isArray(records[0])) {
     const columns = Object.keys(records[0]);
     console.log('Available columns:', columns);
-    
+
     // Check for the new transaction format
     if (columns.includes('Date') && columns.includes('Action') && columns.includes('Symbol') && columns.includes('Price')) {
       console.log('Detected new Schwab transaction format - processing buy/sell transactions');
       return await parseSchwabTransactions(records, existingPositions, context);
     }
   }
-  
+
   // Fall back to original format processing
   const completedTrades = [];
   let totalCommissions = 0;
   let totalFees = 0;
   let totalPnL = 0;
-  
+
   for (const record of records) {
     try {
       let symbol, quantity, costPerShare, proceedsPerShare, gainLoss, openedDate, closedDate, costBasis, term, washSale;
-      
+
       // Handle array format (positional data without headers)
       if (Array.isArray(record)) {
         symbol = record[0];
@@ -2703,7 +3030,7 @@ async function parseSchwabTrades(records, existingPositions = {}, context = {}) 
         term = record['Term'] || 'Unknown';
         washSale = record['Wash Sale?'] === 'Yes';
       }
-      
+
       const estimatedCommission = 0;
       let gainLossPercent = 0;
       if (Array.isArray(record)) {
@@ -2711,7 +3038,7 @@ async function parseSchwabTrades(records, existingPositions = {}, context = {}) 
       } else {
         gainLossPercent = parseFloat(record['Gain/Loss (%)']?.replace(/[%,]/g, '') || 0);
       }
-      
+
       // Determine account identifier - user selection takes priority over CSV column
       const accountIdentifier = context.selectedAccountId
         ? context.selectedAccountId
@@ -2736,7 +3063,7 @@ async function parseSchwabTrades(records, existingPositions = {}, context = {}) 
         notes: `${term} - ${washSale ? 'Wash Sale' : 'Normal'}`,
         accountIdentifier
       };
-      
+
       if (trade.symbol && trade.entryPrice > 0 && trade.exitPrice > 0 && trade.quantity > 0) {
         completedTrades.push(trade);
         totalCommissions += estimatedCommission;
@@ -2747,17 +3074,21 @@ async function parseSchwabTrades(records, existingPositions = {}, context = {}) 
       console.error('Error parsing Schwab trade:', error, record);
     }
   }
-  
+
   console.log(`Created ${completedTrades.length} Schwab trades`);
   return completedTrades;
 }
 
 async function parseSchwabTransactions(records, existingPositions = {}, context = {}) {
   console.log(`Processing ${records.length} Schwab transaction records`);
-  
+
+  // Parse split events first to build registry
+  const splitRegistry = parseSchwabSplitEvents(records);
+  console.log(`[SPLIT] Found ${Object.keys(splitRegistry).length} split events`);
+
   const transactions = [];
   const completedTrades = [];
-  
+
   // First, parse all transactions - only process Buy and Sell actions
   for (const record of records) {
     try {
@@ -2769,59 +3100,76 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
       const feesStr = (record['Fees & Comm'] || '').toString().replace(/[$,]/g, '');
       const date = record['Date'] || '';
       const description = record['Description'] || '';
-      
+
       // Only process buy and sell transactions
       if (!action.includes('buy') && !action.includes('sell')) {
         console.log(`Skipping non-trade action: ${action}`);
         continue;
       }
-      
+
       // Skip if missing essential data
       if (!symbol || !quantityStr || !priceStr) {
         console.log(`Skipping transaction missing data:`, { symbol, quantityStr, priceStr, action });
         continue;
       }
-      
+
       const quantity = Math.abs(parseFloat(quantityStr));
       const price = parseFloat(priceStr);
       const amount = Math.abs(parseFloat(amountStr));
       const fees = parseFloat(feesStr) || 0;
-      
+
       if (quantity === 0 || price === 0) {
         console.log(`Skipping transaction with zero values:`, { symbol, quantity, price });
         continue;
       }
-      
+
       // Detect short sales - only check action field to avoid false positives
       // from security names containing "short" (e.g., "PROSHARES SHORT QQQ ETF")
       const isShort = action.includes('sell short');
-      
+
       let transactionType;
       if (action.includes('buy')) {
         transactionType = isShort ? 'cover' : 'buy';  // Buy to cover vs regular buy
       } else {
         transactionType = isShort ? 'short' : 'sell'; // Short sell vs regular sell
       }
-      
+
       // Parse date and skip if invalid
       const parsedDate = parseDate(date);
       if (!parsedDate) {
         console.log(`Skipping transaction with invalid date:`, { symbol, date, action });
         continue;
       }
-      
+
       const parsedDateTime = parseDateTime(date + ' 09:30');
       if (!parsedDateTime) {
         console.log(`Skipping transaction with invalid datetime:`, { symbol, date, action });
         continue;
       }
-      
+
       // Determine account identifier - user selection takes priority over CSV column
       const accountIdentifier = context.selectedAccountId
         ? context.selectedAccountId
         : context.accountColumnName
           ? extractAccountFromRecord(record, context.accountColumnName)
           : null;
+
+      // Parse instrument data for this symbol (for split-aware grouping)
+      let instrumentData;
+      const schwabOptionMatch = symbol.toUpperCase().match(/^([A-Z]+)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d+(?:\.\d+)?)\s+([PC])$/i);
+      if (schwabOptionMatch) {
+        const [, underlying, month, day, year, strike, type] = schwabOptionMatch;
+        instrumentData = {
+          instrumentType: 'option',
+          underlyingSymbol: underlying,
+          strikePrice: parseFloat(strike),
+          expirationDate: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+          optionType: type.toLowerCase() === 'p' ? 'put' : 'call',
+          contractSize: 100
+        };
+      } else {
+        instrumentData = parseInstrumentData(symbol);
+      }
 
       transactions.push({
         symbol,
@@ -2835,15 +3183,16 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
         description,
         isShort,
         raw: record,
-        accountIdentifier
+        accountIdentifier,
+        instrumentData // Add parsed instrument data
       });
-      
+
       console.log(`Parsed transaction: ${transactionType} ${quantity} ${symbol} @ $${price} ${isShort ? '(SHORT)' : ''}`);
     } catch (error) {
       console.error('Error parsing Schwab transaction:', error, record);
     }
   }
-  
+
   // Assign unique times to transactions on the same date+symbol to preserve CSV order
   // This prevents issues with duplicate detection when multiple round trips occur on the same day
   const transactionsByDateSymbol = {};
@@ -2889,27 +3238,52 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
   // Track the last trade end time for each symbol (for time-gap-based grouping)
   const lastTradeEndTime = {};
 
-  // Group transactions by symbol
-  const transactionsBySymbol = {};
+  // Group transactions by grouping key (which may be strike-agnostic for split-affected options)
+  const transactionsByGroupKey = {};
   for (const transaction of transactions) {
-    if (!transactionsBySymbol[transaction.symbol]) {
-      transactionsBySymbol[transaction.symbol] = [];
+    const groupKey = getOptionGroupingKey(transaction, transaction.instrumentData, splitRegistry);
+    if (!transactionsByGroupKey[groupKey]) {
+      transactionsByGroupKey[groupKey] = [];
     }
-    transactionsBySymbol[transaction.symbol].push(transaction);
+    transactionsByGroupKey[groupKey].push(transaction);
   }
 
+  console.log(`[SPLIT] Grouped transactions into ${Object.keys(transactionsByGroupKey).length} groups`);
+
   // Process transactions using round-trip trade grouping (like TradersVue)
-  for (const symbol in transactionsBySymbol) {
-    const symbolTransactions = transactionsBySymbol[symbol];
+  for (const groupKey in transactionsByGroupKey) {
+    const symbolTransactions = transactionsByGroupKey[groupKey];
 
-    console.log(`\n=== Processing ${symbolTransactions.length} transactions for ${symbol} ===`);
+    // Check if this is a split-affected group (ends with _SPLIT)
+    const isSplitGroup = groupKey.endsWith('_SPLIT');
 
-    // Detect instrument type to apply correct multiplier
-    const instrumentData = parseInstrumentData(symbol);
+    // Use the first transaction's symbol for display (may change for split groups)
+    const symbol = symbolTransactions[0].symbol;
+
+    console.log(`\n=== Processing ${symbolTransactions.length} transactions for ${groupKey} ${isSplitGroup ? '(SPLIT-AFFECTED)' : ''} ===`);
+
+    // Use instrumentData from first transaction (already parsed)
+    const instrumentData = symbolTransactions[0].instrumentData || { instrumentType: 'stock' };
     const valueMultiplier = instrumentData.instrumentType === 'option' ? 100 :
                             instrumentData.instrumentType === 'future' ? (instrumentData.pointValue || 1) : 1;
 
     console.log(`Instrument type: ${instrumentData.instrumentType}, value multiplier: ${valueMultiplier}`);
+
+    // Handle split-affected option groups specially
+    if (isSplitGroup && instrumentData.instrumentType === 'option') {
+      const splitRatio = calculateSplitRatio(symbolTransactions);
+      if (splitRatio) {
+        console.log(`[SPLIT] Processing split-adjusted options with ratio ${splitRatio}:1`);
+        const splitTrades = processSplitAdjustedOptions(symbolTransactions, splitRatio, valueMultiplier, context);
+        if (splitTrades && splitTrades.length > 0) {
+          completedTrades.push(...splitTrades);
+          console.log(`[SPLIT] Added ${splitTrades.length} split-adjusted trade(s)`);
+        }
+        continue; // Skip normal processing for this group
+      } else {
+        console.log(`[SPLIT] Could not determine split ratio, falling back to normal processing`);
+      }
+    }
 
     // Start with existing position if we have one for this symbol
     const existingPosition = existingPositions[symbol];
@@ -3005,7 +3379,7 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
           console.log(`  → Skipping duplicate execution: ${newExecution.action} ${newExecution.quantity} @ $${newExecution.price} at ${newExecution.datetime}`);
         }
       }
-      
+
       // Process the transaction
       if (transaction.action === 'buy') {
         currentPosition += qty;
@@ -3014,14 +3388,14 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
         if (currentTrade && currentTrade.side === 'long') {
           const beforeEntry = currentTrade.entryValue;
           const beforeQty = currentTrade.totalQuantity;
-          currentTrade.entryValue += qty * transaction.price;
+          currentTrade.entryValue += qty * transaction.price * valueMultiplier;
           currentTrade.totalQuantity += qty;
-          console.log(`  → [LONG BUY] Added to entry: ${beforeEntry} + ${qty * transaction.price} = ${currentTrade.entryValue}, Qty: ${beforeQty} + ${qty} = ${currentTrade.totalQuantity}`);
+          console.log(`  → [LONG BUY] Added to entry: ${beforeEntry} + ${qty * transaction.price} * ${valueMultiplier} = ${currentTrade.entryValue}, Qty: ${beforeQty} + ${qty} = ${currentTrade.totalQuantity}`);
         } else if (currentTrade && currentTrade.side === 'short') {
-          currentTrade.exitValue += qty * transaction.price;
-          console.log(`  → [SHORT BUY] Added to exit: ${currentTrade.exitValue}`);
+          currentTrade.exitValue += qty * transaction.price * valueMultiplier;
+          console.log(`  → [SHORT BUY] Added to exit: ${currentTrade.exitValue} (multiplier: ${valueMultiplier})`);
         }
-        
+
         openLots.push({
           type: 'long',
           quantity: qty,
@@ -3029,21 +3403,21 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
           date: transaction.date,
           datetime: transaction.datetime
         });
-        
+
       } else if (transaction.action === 'short' || transaction.action === 'sell') {
         currentPosition -= qty;
 
         // Add to entry or exit value based on trade direction
         if (currentTrade && currentTrade.side === 'short') {
-          currentTrade.entryValue += qty * transaction.price;
+          currentTrade.entryValue += qty * transaction.price * valueMultiplier;
           currentTrade.totalQuantity += qty;
-          console.log(`  → [SHORT SELL] Added to entry: ${currentTrade.entryValue}, Qty: ${currentTrade.totalQuantity}`);
+          console.log(`  → [SHORT SELL] Added to entry: ${currentTrade.entryValue}, Qty: ${currentTrade.totalQuantity} (multiplier: ${valueMultiplier})`);
         } else if (currentTrade && currentTrade.side === 'long') {
           const beforeExit = currentTrade.exitValue;
-          currentTrade.exitValue += qty * transaction.price;
-          console.log(`  → [LONG SELL] Added to exit: ${beforeExit} + ${qty * transaction.price} = ${currentTrade.exitValue}`);
+          currentTrade.exitValue += qty * transaction.price * valueMultiplier;
+          console.log(`  → [LONG SELL] Added to exit: ${beforeExit} + ${qty * transaction.price} * ${valueMultiplier} = ${currentTrade.exitValue}`);
         }
-        
+
         if (transaction.action === 'short') {
           openLots.push({
             type: 'short',
@@ -3054,7 +3428,7 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
           });
         }
       }
-      
+
       console.log(`  Position: ${prevPosition} → ${currentPosition}`);
 
       // Close trade if position goes to zero
@@ -3158,13 +3532,13 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
 
   const transactions = [];
   const completedTrades = [];
-  
+
   // Debug: Log first few records to see structure
   console.log('Sample records:');
   records.slice(0, 5).forEach((record, i) => {
     console.log(`Record ${i}:`, JSON.stringify(record));
   });
-  
+
   // Count record types
   const typeCounts = {};
   records.forEach(record => {
@@ -3172,17 +3546,17 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
     typeCounts[type] = (typeCounts[type] || 0) + 1;
   });
   console.log('Record type counts:', typeCounts);
-  
+
   // First, parse all trade transactions
   for (const record of records) {
     try {
       const type = record.TYPE || record.Type || '';
-      
+
       // Only process TRD (trade) rows
       if (type !== 'TRD') {
         continue;
       }
-      
+
       const description = record.DESCRIPTION || record.Description || '';
       const date = record.DATE || record.Date || '';
       const time = record.TIME || record.Time || '';
@@ -3230,7 +3604,7 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
       console.error('Error parsing thinkorswim transaction:', error, record);
     }
   }
-  
+
   // Sort transactions by symbol and datetime
   transactions.sort((a, b) => {
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
@@ -3309,17 +3683,17 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
     }
     transactionsBySymbol[transaction.symbol].push(transaction);
   }
-  
+
   // Process transactions using round-trip trade grouping
   for (const symbol in transactionsBySymbol) {
     const symbolTransactions = transactionsBySymbol[symbol];
-    
+
     console.log(`\n=== Processing ${symbolTransactions.length} transactions for ${symbol} ===`);
-    
+
     // Track position and round-trip trades
     // Start with existing position if we have one for this symbol
     const existingPosition = existingPositions[symbol];
-    let currentPosition = existingPosition ? 
+    let currentPosition = existingPosition ?
       (existingPosition.side === 'long' ? existingPosition.quantity : -existingPosition.quantity) : 0;
     let currentTrade = existingPosition ? {
       symbol: symbol,
@@ -3336,18 +3710,18 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
       existingTradeId: existingPosition.id,
       newExecutionsAdded: 0
     } : null;
-    
+
     if (existingPosition) {
       console.log(`  → Starting with existing ${existingPosition.side} position: ${existingPosition.quantity} shares @ $${existingPosition.entryPrice}`);
       console.log(`  → Initial position: ${currentPosition}`);
     }
-    
+
     for (const transaction of symbolTransactions) {
       const qty = transaction.quantity;
       const prevPosition = currentPosition;
-      
+
       console.log(`\n${transaction.action} ${qty} @ $${transaction.price} | Position: ${currentPosition}`);
-      
+
       // Start new trade if going from flat to position
       if (currentPosition === 0) {
         currentTrade = {
@@ -3431,20 +3805,20 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
       }
 
       console.log(`  Position: ${prevPosition} → ${currentPosition}`);
-      
+
       // Close trade if position goes to zero
       if (currentPosition === 0 && currentTrade && currentTrade.totalQuantity > 0) {
         // Calculate weighted average prices
         currentTrade.entryPrice = currentTrade.entryValue / currentTrade.totalQuantity;
         currentTrade.exitPrice = currentTrade.exitValue / currentTrade.totalQuantity;
-        
+
         // Calculate P/L
         if (currentTrade.side === 'long') {
           currentTrade.pnl = currentTrade.exitValue - currentTrade.entryValue - currentTrade.totalFees;
         } else {
           currentTrade.pnl = currentTrade.entryValue - currentTrade.exitValue - currentTrade.totalFees;
         }
-        
+
         currentTrade.pnlPercent = (currentTrade.pnl / currentTrade.entryValue) * 100;
         currentTrade.quantity = currentTrade.totalQuantity * (typeof contractMultiplier !== 'undefined' ? contractMultiplier : 1);
         currentTrade.commission = currentTrade.totalFees;
@@ -3464,12 +3838,12 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
         currentTrade.executionData = currentTrade.executions;
         // Add instrument data for options/futures
         Object.assign(currentTrade, instrumentData);
-        
+
         // For options, update symbol to use underlying symbol instead of the full option symbol
         if (instrumentData.instrumentType === 'option' && instrumentData.underlyingSymbol) {
           currentTrade.symbol = instrumentData.underlyingSymbol;
         }
-        
+
         // Mark as update if this was an existing position
         if (currentTrade.isExistingPosition) {
           currentTrade.isUpdate = currentTrade.newExecutionsAdded > 0;
@@ -3479,7 +3853,7 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
           currentTrade.notes = `Round trip: ${currentTrade.executions.length} executions`;
           console.log(`  [SUCCESS] Completed ${currentTrade.side} trade: ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions, P/L: $${currentTrade.pnl.toFixed(2)}`);
         }
-        
+
         // Only add trade if it has executions (skip if all were duplicates)
         if (currentTrade.executions.length > 0) {
           // Map executions to executionData for Trade.create
@@ -3491,11 +3865,11 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
         currentTrade = null;
       }
     }
-    
+
     console.log(`\n${symbol} Final Position: ${currentPosition} shares`);
     if (currentTrade) {
       console.log(`Active trade: ${currentTrade.side} ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions`);
-      
+
       // Add open position as incomplete trade
       // Divide by multiplier to get per-contract/per-share price
       currentTrade.entryPrice = currentTrade.entryValue / (currentTrade.totalQuantity * valueMultiplier);
@@ -3537,16 +3911,16 @@ async function parseThinkorswimTransactions(records, existingPositions = {}, con
 async function parsePaperMoneyTransactions(records, existingPositions = {}, context = {}) {
   const DEBUG = process.env.DEBUG_IMPORT === 'true';
   if (DEBUG) console.log(`Processing ${records.length} PaperMoney transaction records`);
-  
+
   const transactions = [];
   const completedTrades = [];
-  
+
   // Debug: Log first few records to see structure
   console.log('Sample PaperMoney records:');
   records.slice(0, 5).forEach((record, i) => {
     console.log(`Record ${i}:`, JSON.stringify(record));
   });
-  
+
   // First, parse all trade transactions from the filled orders
   for (const record of records) {
     try {
@@ -3557,13 +3931,13 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
       const execTime = record['Exec Time'] || '';
       const posEffect = record['Pos Effect'] || '';
       const type = record.Type || 'STOCK';
-      
+
       // Skip if missing essential data
       if (!symbol || !side || quantity === 0 || price === 0 || !execTime) {
         console.log(`Skipping PaperMoney record missing data:`, { symbol, side, quantity, price, execTime });
         continue;
       }
-      
+
       // Parse the execution time (format: "9/19/25 13:24:32")
       let tradeDate = null;
       let entryTime = null;
@@ -3580,27 +3954,27 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
           entryTime = parseDateTime(fullDate);
         }
       }
-      
+
       if (!tradeDate || !entryTime) {
         console.log(`Skipping PaperMoney record with invalid date: ${execTime}`);
         continue;
       }
-      
+
       // Validate date is reasonable (not in future, not too old)
       const now = new Date();
       const maxFutureDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Allow 1 day in future for timezone issues
       const minPastDate = new Date('2000-01-01');
-      
+
       if (entryTime > maxFutureDate) {
         console.log(`Skipping PaperMoney record with future date: ${execTime}`);
         continue;
       }
-      
+
       if (entryTime < minPastDate) {
         console.log(`Skipping PaperMoney record with date too far in past: ${execTime}`);
         continue;
       }
-      
+
       // Determine account identifier - user selection takes priority over CSV column
       const accountIdentifier = context.selectedAccountId
         ? context.selectedAccountId
@@ -3628,15 +4002,15 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
       console.error('Error parsing PaperMoney transaction:', error, record);
     }
   }
-  
+
   // Sort transactions by symbol and datetime
   transactions.sort((a, b) => {
     if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
     return new Date(a.datetime) - new Date(b.datetime);
   });
-  
+
   console.log(`Parsed ${transactions.length} valid PaperMoney trade transactions`);
-  
+
   // Group transactions by symbol
   const transactionsBySymbol = {};
   for (const transaction of transactions) {
@@ -3645,13 +4019,13 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
     }
     transactionsBySymbol[transaction.symbol].push(transaction);
   }
-  
+
   // Process transactions using round-trip trade grouping
   for (const symbol in transactionsBySymbol) {
     const symbolTransactions = transactionsBySymbol[symbol];
-    
+
     console.log(`\n=== Processing ${symbolTransactions.length} PaperMoney transactions for ${symbol} ===`);
-    
+
     // Track position and round-trip trades
     // Start with existing position if we have one for this symbol
     const existingPosition = existingPositions[symbol];
@@ -3672,18 +4046,18 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
       existingTradeId: existingPosition.id,
       newExecutionsAdded: 0
     } : null;
-    
+
     if (existingPosition) {
       console.log(`  → Starting with existing ${existingPosition.side} position: ${existingPosition.quantity} shares @ $${existingPosition.entryPrice}`);
       console.log(`  → Initial position: ${currentPosition}`);
     }
-    
+
     for (const transaction of symbolTransactions) {
       const qty = transaction.quantity;
       const prevPosition = currentPosition;
-      
+
       console.log(`\n${transaction.action} ${qty} @ $${transaction.price} | Position: ${currentPosition}`);
-      
+
       // Start new trade if going from flat to position
       if (currentPosition === 0) {
         currentTrade = {
@@ -3773,14 +4147,14 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
         // Calculate weighted average prices
         currentTrade.entryPrice = currentTrade.entryValue / currentTrade.totalQuantity;
         currentTrade.exitPrice = currentTrade.exitValue / currentTrade.totalQuantity;
-        
+
         // Calculate P/L
         if (currentTrade.side === 'long') {
           currentTrade.pnl = currentTrade.exitValue - currentTrade.entryValue - currentTrade.totalFees;
         } else {
           currentTrade.pnl = currentTrade.entryValue - currentTrade.exitValue - currentTrade.totalFees;
         }
-        
+
         currentTrade.pnlPercent = (currentTrade.pnl / currentTrade.entryValue) * 100;
         currentTrade.quantity = currentTrade.totalQuantity * (typeof contractMultiplier !== 'undefined' ? contractMultiplier : 1);
         currentTrade.commission = currentTrade.totalFees;
@@ -3800,12 +4174,12 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
         currentTrade.executionData = currentTrade.executions;
         // Add instrument data for options/futures
         Object.assign(currentTrade, instrumentData);
-        
+
         // For options, update symbol to use underlying symbol instead of the full option symbol
         if (instrumentData.instrumentType === 'option' && instrumentData.underlyingSymbol) {
           currentTrade.symbol = instrumentData.underlyingSymbol;
         }
-        
+
         // Mark as update if this was an existing position
         if (currentTrade.isExistingPosition) {
           currentTrade.isUpdate = currentTrade.newExecutionsAdded > 0;
@@ -3815,7 +4189,7 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
           currentTrade.notes = `Round trip: ${currentTrade.executions.length} executions`;
           console.log(`  [SUCCESS] Completed ${currentTrade.side} trade: ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions, P/L: $${currentTrade.pnl.toFixed(2)}`);
         }
-        
+
         // Only add trade if it has executions (skip if all were duplicates)
         if (currentTrade.executions.length > 0) {
           // Map executions to executionData for Trade.create
@@ -3827,11 +4201,11 @@ async function parsePaperMoneyTransactions(records, existingPositions = {}, cont
         currentTrade = null;
       }
     }
-    
+
     console.log(`\n${symbol} Final Position: ${currentPosition} shares`);
     if (currentTrade) {
       console.log(`Active trade: ${currentTrade.side} ${currentTrade.totalQuantity} shares, ${currentTrade.executions.length} executions`);
-      
+
       // Add open position as incomplete trade
       // Divide by multiplier to get per-contract/per-share price
       currentTrade.entryPrice = currentTrade.entryValue / (currentTrade.totalQuantity * valueMultiplier);
@@ -4151,7 +4525,7 @@ async function parseTradingViewTransactions(records, existingPositions = {}, con
         currentTrade.executionData = currentTrade.executions;
         // Add instrument data for options/futures
         Object.assign(currentTrade, instrumentData);
-        
+
         // For options, update symbol to use underlying symbol instead of the full option symbol
         if (instrumentData.instrumentType === 'option' && instrumentData.underlyingSymbol) {
           currentTrade.symbol = instrumentData.underlyingSymbol;
@@ -4843,7 +5217,7 @@ async function parseIBKRTransactions(records, existingPositions = {}, tradeGroup
         currentTrade.executionData = currentTrade.executions;
         // Add instrument data for options/futures
         Object.assign(currentTrade, instrumentData);
-        
+
         // For options, update symbol to use underlying symbol instead of the full option symbol
         if (instrumentData.instrumentType === 'option' && instrumentData.underlyingSymbol) {
           currentTrade.symbol = instrumentData.underlyingSymbol;
