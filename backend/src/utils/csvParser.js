@@ -2676,7 +2676,7 @@ function parseSchwabOptionSymbol(symbol) {
 
 /**
  * Parse split events from Schwab CSV records
- * Looks for "Options Frwd Split" and "Stock Split" actions
+ * Looks for "Options Frwd Split", "Stock Split", and "Reverse Split" actions
  * @param {Array} records - CSV records
  * @returns {Object} - Split registry keyed by underlying_expiration_optionType
  */
@@ -2695,7 +2695,7 @@ function parseSchwabSplitEvents(records) {
       if (optionData) {
         const key = `${optionData.underlying}_${optionData.expiration}_${optionData.optionType}`;
         splitRegistry[key] = {
-          type: 'option_split',
+          type: 'forward_split',
           underlying: optionData.underlying,
           expiration: optionData.expiration,
           optionType: optionData.optionType,
@@ -2703,12 +2703,48 @@ function parseSchwabSplitEvents(records) {
           splitDate: date,
           description
         };
-        console.log(`[SPLIT] Detected option split for ${key} on ${date}: post-split strike = $${optionData.strike}`);
+        console.log(`[SPLIT] Detected option forward split for ${key} on ${date}: post-split strike = $${optionData.strike}`);
       }
     }
 
-    // Check for stock split (which affects options)
-    if (action.includes('stock split')) {
+    // Check for reverse split (stock or options)
+    // Format: "Reverse Split" action with symbol like "USAS" and quantity showing the change
+    if (action.includes('reverse split')) {
+      // Extract underlying from symbol (first row has the ticker, second has CUSIP)
+      const underlying = symbol.match(/^([A-Z]+)$/)?.[1];
+      if (underlying) {
+        // Mark this underlying as having a reverse split
+        const key = `${underlying}_REVERSE_SPLIT`;
+        if (!splitRegistry[key]) {
+          splitRegistry[key] = {
+            type: 'reverse_split',
+            underlying,
+            splitDate: date,
+            description
+          };
+          console.log(`[SPLIT] Detected reverse split for ${underlying} on ${date}`);
+        }
+      }
+
+      // Also check for option reverse splits
+      const optionData = parseSchwabOptionSymbol(symbol);
+      if (optionData) {
+        const key = `${optionData.underlying}_${optionData.expiration}_${optionData.optionType}`;
+        splitRegistry[key] = {
+          type: 'reverse_split',
+          underlying: optionData.underlying,
+          expiration: optionData.expiration,
+          optionType: optionData.optionType,
+          postSplitStrike: optionData.strike,
+          splitDate: date,
+          description
+        };
+        console.log(`[SPLIT] Detected option reverse split for ${key} on ${date}: post-split strike = $${optionData.strike}`);
+      }
+    }
+
+    // Check for stock split (forward, which affects options)
+    if (action.includes('stock split') && !action.includes('reverse')) {
       // Extract underlying from description or symbol
       const underlying = symbol.match(/^([A-Z]+)/)?.[1];
       if (underlying) {
@@ -2716,7 +2752,7 @@ function parseSchwabSplitEvents(records) {
         // We'll refine this when we see the actual option transactions
         if (!splitRegistry[`${underlying}_STOCK_SPLIT`]) {
           splitRegistry[`${underlying}_STOCK_SPLIT`] = {
-            type: 'stock_split',
+            type: 'forward_split',
             underlying,
             splitDate: date,
             description
@@ -2747,7 +2783,7 @@ function getOptionGroupingKey(transaction, instrumentData, splitRegistry) {
   const { underlyingSymbol, expirationDate, optionType } = instrumentData;
   const splitKey = `${underlyingSymbol}_${expirationDate}_${optionType}`;
 
-  // Check if there's a known split for this option series
+  // Check if there's a known split for this option series (forward or reverse)
   if (splitRegistry[splitKey]) {
     // Return strike-agnostic key for split-affected options
     const groupKey = `${underlyingSymbol}_${expirationDate}_${optionType}_SPLIT`;
@@ -2755,10 +2791,17 @@ function getOptionGroupingKey(transaction, instrumentData, splitRegistry) {
     return groupKey;
   }
 
-  // Check if underlying had a stock split
+  // Check if underlying had a stock split (forward)
   if (splitRegistry[`${underlyingSymbol}_STOCK_SPLIT`]) {
     const groupKey = `${underlyingSymbol}_${expirationDate}_${optionType}_SPLIT`;
     console.log(`[SPLIT] Underlying ${underlyingSymbol} had stock split, using strike-agnostic grouping -> ${groupKey}`);
+    return groupKey;
+  }
+
+  // Check if underlying had a reverse split
+  if (splitRegistry[`${underlyingSymbol}_REVERSE_SPLIT`]) {
+    const groupKey = `${underlyingSymbol}_${expirationDate}_${optionType}_SPLIT`;
+    console.log(`[SPLIT] Underlying ${underlyingSymbol} had reverse split, using strike-agnostic grouping -> ${groupKey}`);
     return groupKey;
   }
 
@@ -2767,9 +2810,9 @@ function getOptionGroupingKey(transaction, instrumentData, splitRegistry) {
 }
 
 /**
- * Calculate split ratio from strike prices
+ * Calculate split ratio and direction from strike prices and transaction dates
  * @param {Array} transactions - Transactions in the group
- * @returns {number|null} - Split ratio (e.g., 2 for 2:1 split) or null if can't determine
+ * @returns {Object|null} - { ratio, isReverse, highStrike, lowStrike } or null if can't determine
  */
 function calculateSplitRatio(transactions) {
   // Find unique strike prices
@@ -2779,26 +2822,49 @@ function calculateSplitRatio(transactions) {
     return null; // Need at least 2 different strikes to calculate ratio
   }
 
-  // Sort strikes descending
-  strikes.sort((a, b) => b - a);
+  // Sort strikes ascending
+  strikes.sort((a, b) => a - b);
+  const lowStrike = strikes[0];
+  const highStrike = strikes[strikes.length - 1];
 
   // Calculate ratio from highest to lowest strike
-  const ratio = strikes[0] / strikes[strikes.length - 1];
+  const ratio = highStrike / lowStrike;
 
-  // Check if ratio is close to a whole number (common split ratios: 2, 3, 4, etc.)
+  // Determine split direction by looking at transaction dates
+  // Earlier transactions have pre-split strikes, later have post-split
+  const sortedByDate = [...transactions].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+  const earliestStrike = sortedByDate[0]?.instrumentData?.strikePrice;
+  const latestStrike = sortedByDate[sortedByDate.length - 1]?.instrumentData?.strikePrice;
+
+  // If earliest strike > latest strike, it's a forward split (strike went down)
+  // If earliest strike < latest strike, it's a reverse split (strike went up)
+  const isReverse = earliestStrike < latestStrike;
+
+  // Validate ratio is a common split ratio
+  const commonRatios = [1.5, 2, 2.5, 3, 4, 5, 10];
+  let validRatio = null;
+
   const roundedRatio = Math.round(ratio);
   if (Math.abs(ratio - roundedRatio) < 0.01 && roundedRatio >= 2) {
-    console.log(`[SPLIT] Calculated split ratio: ${roundedRatio}:1 (from strikes ${strikes.join(', ')})`);
-    return roundedRatio;
+    validRatio = roundedRatio;
+  } else {
+    for (const commonRatio of commonRatios) {
+      if (Math.abs(ratio - commonRatio) < 0.01) {
+        validRatio = commonRatio;
+        break;
+      }
+    }
   }
 
-  // Handle fractional splits (e.g., 3:2)
-  const commonRatios = [1.5, 2, 2.5, 3, 4, 5, 10];
-  for (const commonRatio of commonRatios) {
-    if (Math.abs(ratio - commonRatio) < 0.01) {
-      console.log(`[SPLIT] Calculated split ratio: ${commonRatio}:1 (from strikes ${strikes.join(', ')})`);
-      return commonRatio;
-    }
+  if (validRatio) {
+    const splitType = isReverse ? 'reverse' : 'forward';
+    console.log(`[SPLIT] Calculated ${splitType} split ratio: ${validRatio}:1 (strikes: $${lowStrike} <-> $${highStrike})`);
+    return {
+      ratio: validRatio,
+      isReverse,
+      highStrike,
+      lowStrike
+    };
   }
 
   console.log(`[SPLIT] Could not determine split ratio from strikes ${strikes.join(', ')} (ratio=${ratio.toFixed(4)})`);
@@ -2808,32 +2874,51 @@ function calculateSplitRatio(transactions) {
 /**
  * Process split-adjusted options transactions into a completed trade
  * @param {Array} transactions - All transactions for this split-affected option series
- * @param {number} splitRatio - The split ratio (e.g., 2 for 2:1)
+ * @param {Object} splitInfo - Split info from calculateSplitRatio: { ratio, isReverse, highStrike, lowStrike }
  * @param {number} valueMultiplier - Contract multiplier (100 for options)
  * @param {Object} context - Import context
  * @returns {Object|null} - Completed trade or null
  */
-function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, context) {
+function processSplitAdjustedOptions(transactions, splitInfo, valueMultiplier, context) {
   if (!transactions || transactions.length === 0) return null;
 
-  // Find the post-split strike (lowest strike)
-  const strikes = [...new Set(transactions.map(t => t.instrumentData?.strikePrice).filter(s => s))];
-  strikes.sort((a, b) => a - b);
-  const postSplitStrike = strikes[0];
-  const preSplitStrike = strikes[strikes.length - 1];
+  const { ratio: splitRatio, isReverse, highStrike, lowStrike } = splitInfo;
 
-  console.log(`[SPLIT] Processing split-adjusted options: pre-split strike=$${preSplitStrike}, post-split strike=$${postSplitStrike}, ratio=${splitRatio}`);
+  // For forward split: pre-split has high strike, post-split has low strike
+  // For reverse split: pre-split has low strike, post-split has high strike
+  const preSplitStrike = isReverse ? lowStrike : highStrike;
+  const postSplitStrike = isReverse ? highStrike : lowStrike;
+
+  const splitType = isReverse ? 'REVERSE' : 'FORWARD';
+  console.log(`[SPLIT] Processing ${splitType} split-adjusted options: pre-split strike=$${preSplitStrike}, post-split strike=$${postSplitStrike}, ratio=${splitRatio}`);
 
   // Normalize all transactions to post-split terms
   const normalizedTransactions = transactions.map(t => {
-    const isPreSplit = t.instrumentData?.strikePrice > postSplitStrike;
+    const txnStrike = t.instrumentData?.strikePrice;
+
+    // Determine if this is a pre-split transaction
+    // Forward split: pre-split has higher strike
+    // Reverse split: pre-split has lower strike
+    const isPreSplit = isReverse
+      ? (txnStrike < postSplitStrike || Math.abs(txnStrike - lowStrike) < 0.01)
+      : (txnStrike > postSplitStrike || Math.abs(txnStrike - highStrike) < 0.01);
 
     if (isPreSplit) {
-      // Normalize: multiply quantity by ratio, divide price by ratio
-      const normalizedQty = t.quantity * splitRatio;
-      const normalizedPrice = t.price / splitRatio;
+      let normalizedQty, normalizedPrice;
 
-      console.log(`[SPLIT] Normalizing pre-split transaction: ${t.action} ${t.quantity}@$${t.price} -> ${normalizedQty}@$${normalizedPrice.toFixed(4)}`);
+      if (isReverse) {
+        // Reverse split: pre-split had MORE contracts at LOWER price
+        // Normalize: divide quantity by ratio, multiply price by ratio
+        normalizedQty = t.quantity / splitRatio;
+        normalizedPrice = t.price * splitRatio;
+      } else {
+        // Forward split: pre-split had FEWER contracts at HIGHER price
+        // Normalize: multiply quantity by ratio, divide price by ratio
+        normalizedQty = t.quantity * splitRatio;
+        normalizedPrice = t.price / splitRatio;
+      }
+
+      console.log(`[SPLIT] Normalizing pre-split transaction (${splitType}): ${t.action} ${t.quantity}@$${t.price} -> ${normalizedQty}@$${normalizedPrice.toFixed(4)}`);
 
       return {
         ...t,
@@ -2843,7 +2928,8 @@ function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, 
         quantity: normalizedQty,
         price: normalizedPrice,
         splitAdjusted: true,
-        splitRatio
+        splitRatio,
+        isReverse
       };
     }
 
@@ -2857,9 +2943,9 @@ function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, 
   normalizedTransactions.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
   // Process round-trip with normalized values
-  // Use the first transaction's instrument data but with post-split symbol
-  const firstTxn = normalizedTransactions[0];
-  const postSplitSymbol = normalizedTransactions.find(t => !t.splitAdjusted)?.symbol || firstTxn.symbol;
+  // Use the post-split symbol (the one with post-split strike)
+  const postSplitSymbol = normalizedTransactions.find(t => !t.splitAdjusted)?.symbol ||
+                          normalizedTransactions[normalizedTransactions.length - 1].symbol;
 
   // Initialize trade
   let currentPosition = 0;
@@ -2885,6 +2971,7 @@ function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, 
         accountIdentifier: transaction.accountIdentifier,
         splitAdjusted: true,
         splitRatio,
+        isReverseSplit: isReverse,
         originalStrike: preSplitStrike,
         postSplitStrike
       };
@@ -2956,9 +3043,10 @@ function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, 
       }
 
       currentTrade.executionData = currentTrade.executions;
-      currentTrade.notes = `Split-adjusted (${splitRatio}:1): original strike $${preSplitStrike} -> $${postSplitStrike}`;
+      const splitTypeLabel = isReverse ? 'Reverse split' : 'Split';
+      currentTrade.notes = `${splitTypeLabel}-adjusted (${splitRatio}:1): strike $${preSplitStrike} -> $${postSplitStrike}`;
 
-      console.log(`[SPLIT] Completed split-adjusted ${currentTrade.side} trade: ${currentTrade.quantity} contracts, P/L: $${currentTrade.pnl.toFixed(2)}`);
+      console.log(`[SPLIT] Completed ${splitType} split-adjusted ${currentTrade.side} trade: ${currentTrade.quantity} contracts, P/L: $${currentTrade.pnl.toFixed(2)}`);
 
       completedTrades.push(currentTrade);
       currentTrade = null;
@@ -2972,7 +3060,8 @@ function processSplitAdjustedOptions(transactions, splitRatio, valueMultiplier, 
     currentTrade.commission = currentTrade.totalFees;
     currentTrade.fees = 0;
     currentTrade.executionData = currentTrade.executions;
-    currentTrade.notes = `Split-adjusted open position (${splitRatio}:1): original strike $${preSplitStrike} -> $${postSplitStrike}`;
+    const splitTypeLabel = isReverse ? 'Reverse split' : 'Split';
+    currentTrade.notes = `${splitTypeLabel}-adjusted open position (${splitRatio}:1): strike $${preSplitStrike} -> $${postSplitStrike}`;
 
     completedTrades.push(currentTrade);
   }
@@ -3271,10 +3360,11 @@ async function parseSchwabTransactions(records, existingPositions = {}, context 
 
     // Handle split-affected option groups specially
     if (isSplitGroup && instrumentData.instrumentType === 'option') {
-      const splitRatio = calculateSplitRatio(symbolTransactions);
-      if (splitRatio) {
-        console.log(`[SPLIT] Processing split-adjusted options with ratio ${splitRatio}:1`);
-        const splitTrades = processSplitAdjustedOptions(symbolTransactions, splitRatio, valueMultiplier, context);
+      const splitInfo = calculateSplitRatio(symbolTransactions);
+      if (splitInfo) {
+        const splitType = splitInfo.isReverse ? 'reverse' : 'forward';
+        console.log(`[SPLIT] Processing ${splitType} split-adjusted options with ratio ${splitInfo.ratio}:1`);
+        const splitTrades = processSplitAdjustedOptions(symbolTransactions, splitInfo, valueMultiplier, context);
         if (splitTrades && splitTrades.length > 0) {
           completedTrades.push(...splitTrades);
           console.log(`[SPLIT] Added ${splitTrades.length} split-adjusted trade(s)`);
